@@ -1,0 +1,16 @@
+# Python gereksizleri
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sanal ortam
+venv/
+env/
+
+# Veritabanı ve Loglar (GitHub'a gitmesin, yerelde kalsın)
+*.sqlite3
+*.log
+logs/
+
+# Modeller (Büyük dosyalar gitmesin)
+models/*.pkl
