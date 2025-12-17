@@ -13,4 +13,4 @@ env/
 logs/
 
 # Modeller (Büyük dosyalar gitmesin)
-models/*.pkl
+models/*.pkls
