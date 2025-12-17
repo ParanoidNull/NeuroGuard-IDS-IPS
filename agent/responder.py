@@ -1,35 +1,20 @@
 from scapy.all import IP, TCP, send
-import sys
 
-class Renkler:
-    KIRMIZI = '\033[91m'
-    RESET = '\033[0m'
-
-def baglantiyi_kes(paket):
+def kill_connection(packet):
     """
-    Hedef paketi alir ve gonderen kisiye sahte bir RST (Reset) paketi yollar.
-    Bu paket 'Baglantiyi derhal kopar' emridir.
+    Sends a TCP Reset (RST) packet to terminate the connection.
     """
-    # Sadece TCP paketleri kesilebilir (UDP baglantisizdir)
-    if not paket.haslayer(TCP):
-        return
+    # Extract IP and TCP headers
+    ip_layer = packet[IP]
+    tcp_layer = packet[TCP]
 
-    # Paket bilgilerini al
-    ip_layer = paket[IP]
-    tcp_layer = paket[TCP]
-
-    # --- SALDIRGANA MÜDAHALE ---
-    # Sanki hedef biz degilmisiz gibi, hedef adina saldirgana cevap donuyoruz.
-    # IP'leri ve Portlari ters ceviriyoruz.
-    # Seq numarasi onemli: Saldirganin bekledigi siradaki numara (ACK) olmali.
-    
+    # Create the RST packet (Spoofing the destination)
+    # We pretend to be the 'dst' sending a Reset to 'src'
     rst_pkt = IP(src=ip_layer.dst, dst=ip_layer.src) / \
-              TCP(sport=tcp_layer.dport, dport=tcp_layer.sport,
-                  flags="R", # R = RESET Bayragi
-                  seq=tcp_layer.ack, # Onun bekledigi sira
-                  ack=0)
+              TCP(sport=tcp_layer.dport, dport=tcp_layer.sport, 
+                  flags="R", seq=tcp_layer.ack, ack=tcp_layer.seq + 1)
 
-    # Sessizce gonder (verbose=0)
+    # Send the packet (verbose=0 suppresses default scapy output)
     send(rst_pkt, verbose=0)
     
-    print(f"{Renkler.KIRMIZI}   >>> [IPS] Baglanti Kesici (RST) Gonderildi! -> {ip_layer.src}{Renkler.RESET}")
+    print(f">>> [IPS] Kill Packet (RST) Sent! -> {ip_layer.src}")

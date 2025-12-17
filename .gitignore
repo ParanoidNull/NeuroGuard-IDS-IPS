@@ -1,16 +1,6 @@
-# Python gereksizleri
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Sanal ortam
 venv/
-env/
-
-# Veritabanı ve Loglar (GitHub'a gitmesin, yerelde kalsın)
-*.sqlite3
-*.log
-logs/
-
-# Modeller (Büyük dosyalar gitmesin)
-models/*.pkls
+__pycache__/
+*.pyc
+.DS_Store
+models/*.pkl
+logs/*.csv

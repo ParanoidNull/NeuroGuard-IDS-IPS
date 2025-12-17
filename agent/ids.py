@@ -2,106 +2,89 @@ import sys
 import os
 import joblib
 import pandas as pd
-from scapy.all import sniff, IP, TCP, UDP, ICMP, get_if_list, conf
+from scapy.all import sniff, IP, TCP, UDP, get_if_list, conf
 from datetime import datetime
 import warnings
 
-# Baglanti kesici fonksiyonu cagiriyoruz
 try:
-    from responder import baglantiyi_kes
+    from responder import kill_connection
 except ImportError:
-    # Eger import hatasi olursa ayni klasorde degildir, manuel import deneriz
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from agent.responder import baglantiyi_kes
+    from agent.responder import kill_connection
 
 warnings.filterwarnings("ignore")
 MODEL_FILE = "models/isolation_forest.pkl"
 
-class Renkler:
-    YESIL = '\033[92m'
-    KIRMIZI = '\033[91m'
-    SARI = '\033[93m'
-    MAVI = '\033[94m'
+class Colors:
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
     RESET = '\033[0m'
 
-# Modeli Yukle
+# Load Model
 try:
     if os.path.exists(MODEL_FILE):
         clf = joblib.load(MODEL_FILE)
     else:
-        print(f"{Renkler.SARI}Model bulunamadi, sadece kural tabanli calisacak.{Renkler.RESET}")
         clf = None
 except:
     clf = None
 
-def paket_analizcisi(paket):
-    if IP in paket:
-        src_ip = paket[IP].src
-        dst_ip = paket[IP].dst
-        src_port = 0
-        dst_port = 0
-        length = len(paket)
-        protocol = "OTHER"
+def packet_analyzer(packet):
+    if IP in packet:
+        # Ignore UDP for noise reduction in demo
+        if UDP in packet or not TCP in packet:
+            return
+
+        src_ip = packet[IP].src
+        dst_ip = packet[IP].dst
+        src_port = packet[TCP].sport
+        dst_port = packet[TCP].dport
+        length = len(packet)
         
-        # Protokol Tespiti
-        if TCP in paket:
-            protocol = "TCP"
-            src_port = paket[TCP].sport
-            dst_port = paket[TCP].dport
-        elif UDP in paket:
-            protocol = "UDP"
-            src_port = paket[UDP].sport
-            dst_port = paket[UDP].dport
+        pred = 1 
 
-        zaman = datetime.now().strftime("%H:%M:%S")
-        pred = 1 # Varsayilan: Normal
-
-        # --- YAPAY ZEKA KONTROLU ---
-        if clf and protocol != "OTHER":
+        # AI Prediction
+        if clf:
             try:
                 features = pd.DataFrame([[src_port, dst_port, length]], columns=['Src Port', 'Dst Port', 'Length'])
                 pred = clf.predict(features)[0]
             except:
                 pass
 
-        # --- HILE (TEST) MODU: PORT 666 ---
-        # Burasi Windows surucu hatalarini asmak icin eklendi.
-        # Port 666 ise, paket bozuk gorunse bile TCP kabul et ve SALDIRI say.
+        # HARDCODED RULE: Port 666 is always an attack
         if dst_port == 666 or src_port == 666:
             pred = -1
-            protocol = "TCP" # Zorla TCP yap
-            print(f"{Renkler.SARI}[TEST] Port 666 yakalandi -> Protokol TCP'ye zorlandi.{Renkler.RESET}")
+            print(f"\n{Colors.YELLOW}[TEST] Target Detected (Port 666)!{Colors.RESET}")
 
-        # --- KARAR ANI ---
+        # THREAT DETECTED
         if pred == -1:
-            print(f"{Renkler.KIRMIZI}[!!! TEHDIT !!!] [{zaman}] Anomali: {src_ip} -> {dst_ip} (Port: {dst_port}){Renkler.RESET}")
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"{Colors.RED}[!!! THREAT !!!] [{timestamp}] Anomaly: {src_ip} -> {dst_ip}:{dst_port}{Colors.RESET}")
             
-            # IPS DEVREYE GIRER
-            if protocol == "TCP":
-                print(f"{Renkler.KIRMIZI}    -> Aksiyon: Baglanti Kesiliyor (RST)...{Renkler.RESET}")
-                try:
-                    baglantiyi_kes(paket)
-                except Exception as e:
-                    print(f"RST hatasi: {e}")
-            else:
-                print(f"{Renkler.SARI}    -> UDP/ICMP icin RST atilamaz.{Renkler.RESET}")
+            print(f"{Colors.RED}    -> Action: Terminating Connection (RST Injection)...{Colors.RESET}")
+            try:
+                kill_connection(packet)
+            except Exception as e:
+                print(f"RST Error: {e}")
 
-def ids_baslat():
-    print(f"{Renkler.MAVI}--- NeuroGuard IDS/IPS Aktif ---{Renkler.RESET}")
+def start_ids():
+    print(f"{Colors.BLUE}--- NeuroGuard IDS/IPS (Active Defense) ---{Colors.RESET}")
+    print("Monitoring TCP traffic for anomalies...\n")
     
     ifaces = get_if_list()
     for i, iface in enumerate(ifaces):
         try: desc = conf.iface.description
-        except: desc = "Bilinmiyor"
-        print(f"{i}: {iface}")
+        except: desc = ""
+        print(f"{i}: {iface} {desc}")
     
-    secim = input(f"{Renkler.SARI}Arayuz No: {Renkler.RESET}")
+    choice = input(f"{Colors.YELLOW}Select Interface ID: {Colors.RESET}")
     try:
-        secilen = ifaces[int(secim)]
-        print(f"Koruma basladi: {secilen}")
-        sniff(iface=secilen, prn=paket_analizcisi, store=0)
+        selected_iface = ifaces[int(choice)]
+        print(f"Protection Started on: {selected_iface}")
+        sniff(iface=selected_iface, prn=packet_analyzer, store=0)
     except Exception as e:
-        print(f"Hata: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
-    ids_baslat()
+    start_ids()

@@ -2,63 +2,70 @@ import pandas as pd
 from sklearn.ensemble import IsolationForest
 import joblib
 import os
+import sys
 
-# Dosya Yolları
-LOG_FILE = "logs/traffic_data.csv"
-MODEL_FILE = "models/isolation_forest.pkl"
-MODEL_DIR = "models"
+# Define Paths
+# We navigate up from 'server/' to root, then to 'logs/' and 'models/'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOG_FILE = os.path.join(BASE_DIR, 'logs', 'traffic_data.csv')
+MODEL_DIR = os.path.join(BASE_DIR, 'models')
+MODEL_FILE = os.path.join(MODEL_DIR, 'isolation_forest.pkl')
 
-class Renkler:
-    YESIL = '\033[92m'
-    MAVI = '\033[94m'
-    KIRMIZI = '\033[91m'
+class Colors:
+    GREEN = '\033[92m'
+    BLUE = '\033[94m'
+    RED = '\033[91m'
     RESET = '\033[0m'
 
-def model_egit():
-    print(f"{Renkler.MAVI}--- NeuroGuard AI Egitim Modulu ---{Renkler.RESET}")
+def train():
+    print(f"{Colors.BLUE}--- NeuroGuard AI Training Module ---{Colors.RESET}")
 
-    # 1. Veriyi Yukle
+    # 1. Load Data
     if not os.path.exists(LOG_FILE):
-        print(f"{Renkler.KIRMIZI}Hata: Veri dosyasi bulunamadi! Once sniffer.py calistirip veri toplayin.{Renkler.RESET}")
+        print(f"{Colors.RED}[ERROR] Data file not found! Please run 'Sniffer' first to collect data.{Colors.RESET}")
         return
 
-    print("Veri seti yukleniyor...")
+    print("Loading dataset...")
     try:
         df = pd.read_csv(LOG_FILE)
     except Exception as e:
-        print(f"Hata: CSV okunurken sorun olustu. Dosya bos olabilir. {e}")
+        print(f"Error reading CSV. File might be empty. Details: {e}")
         return
 
-    # Veri setinde yeterli veri var mi?
+    # Check Data Quality
     if len(df) < 50:
-        print(f"{Renkler.KIRMIZI}Uyari: Yetersiz veri ({len(df)} satir). Saglikli egitim icin en az 100-200 satir veri toplayin.{Renkler.RESET}")
+        print(f"{Colors.RED}[WARNING] Insufficient data ({len(df)} rows). Capture at least 100-200 packets for better results.{Colors.RESET}")
         return
 
-    # 2. Ozellik Secimi (Feature Selection)
-    # AI su an sadece sayisal degerlere bakacak: Kaynak Port, Hedef Port, Paket Boyutu
-    # IP adresleri ve Bayraklar (Flags) string oldugu icin MVP asamasinda cikartiyoruz.
+    # 2. Feature Selection
+    # AI looks at numerical values: Source Port, Destination Port, Packet Length
     features = ['Src Port', 'Dst Port', 'Length']
     
-    # Eksik verileri temizle (varsa)
+    # Check if required columns exist
+    if not all(col in df.columns for col in features):
+        print(f"{Colors.RED}[ERROR] CSV is missing required columns: {features}{Colors.RESET}")
+        return
+
+    # Drop missing values
     X = df[features].dropna()
 
-    print(f"Egitim basladi... ({len(X)} ornek ile)")
+    print(f"Training started with {len(X)} samples...")
 
-    # 3. Modeli Kur (Isolation Forest)
-    # contamination=0.01 -> Verinin %1'inin gurultu/anomali olabilecegini varsayiyoruz.
-    # random_state=42 -> Her calistirdigimizda ayni sonuclari versin diye sabitliyoruz.
+    # 3. Build Model (Isolation Forest)
+    # contamination=0.01 -> We assume ~1% of data might be anomalies/noise
+    # random_state=42 -> Fixed seed for reproducibility
     clf = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
     
     clf.fit(X)
 
-    # 4. Modeli Kaydet
+    # 4. Save Model
     if not os.path.exists(MODEL_DIR):
         os.makedirs(MODEL_DIR)
 
     joblib.dump(clf, MODEL_FILE)
     
-    print(f"{Renkler.YESIL}Basarili! Model egitildi ve kaydedildi: {MODEL_FILE}{Renkler.RESET}")
-    print("Artik sistem anormallikleri taniyabilir.")
+    print(f"{Colors.GREEN}[SUCCESS] Model trained and saved to: {MODEL_FILE}{Colors.RESET}")
+    print("System is now ready to detect anomalies.")
 
 if __name__ == "__main__":
-    model_egit()
+    train()

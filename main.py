@@ -1,87 +1,76 @@
 import os
 import sys
 import time
+import threading
 
-# Renk Kodlari (Terminalde havali durmasi icin)
-class Renkler:
-    YESIL = '\033[92m'
-    KIRMIZI = '\033[91m'
-    MAVI = '\033[94m'
-    SARI = '\033[93m'
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
+# Add module paths
+sys.path.append(os.path.join(os.path.dirname(__file__), 'agent'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'server'))
 
-def ekran_temizle():
-    # Windows icin 'cls', Linux/Mac icin 'clear'
+try:
+    from agent import sniffer, ids
+    from server import train_model
+except ImportError as e:
+    print(f"[ERROR] Module missing: {e}")
+    print("Please run 'baslat.bat' or 'pip install -r requirements.txt'")
+    sys.exit()
+
+def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def banner():
-    print(f"{Renkler.MAVI}{Renkler.BOLD}")
-    print("""
-    _   _                      ____uard
-   | \ | | ___ _   _ _ __ ___ / ___|
-   |  \| |/ _ \ | | | '__/ _ \ |  _ 
-   | |\  |  __/ |_| | | | (_) | |_| |
-   |_| \_|\___|\__,_|_|  \___/ \____|
-                                      
-    AI Powered IDS / IPS System v1.0
-    --------------------------------
-    """)
-    print(f"{Renkler.RESET}")
+def print_banner():
+    clear_screen()
+    print("\033[94m")
+    print("========================================================")
+    print("    N E U R O G U A R D  -  AI IDS/IPS SYSTEM")
+    print("========================================================")
+    print("    [1] Start Data Collection (Sniffer)")
+    print("    [2] Train AI Model")
+    print("    [3] Start AI Protection (IDS/IPS Mode)")
+    print("    [4] Launch Dashboard (Web UI)")
+    print("    [5] Attack Simulation (Test)")
+    print("    [Q] Exit")
+    print("========================================================\033[0m")
 
-def menu():
+def main():
     while True:
-        ekran_temizle()
-        banner()
-        print(f"{Renkler.SARI}Lutfen bir modul secin:{Renkler.RESET}\n")
-        print(f"[{Renkler.YESIL}1{Renkler.RESET}] Veri Toplama Modulu (Sniffer)")
-        print(f"[{Renkler.YESIL}2{Renkler.RESET}] Yapay Zeka Egitimi (Model Training)")
-        print(f"[{Renkler.YESIL}3{Renkler.RESET}] IDS/IPS Koruma Kalkanini Baslat")
-        print(f"[{Renkler.YESIL}4{Renkler.RESET}] Dashboard (Web Arayuzu)")
-        print(f"[{Renkler.YESIL}5{Renkler.RESET}] Saldiri Simulasyonu (Test)")
-        print(f"[{Renkler.KIRMIZI}0{Renkler.RESET}] Cikis")
-        
-        print("\n" + "-"*30)
-        secim = input(f"{Renkler.MAVI}NeuroGuard > {Renkler.RESET}")
+        print_banner()
+        choice = input("\nSelect Option: ").upper()
 
-        if secim == '1':
-            print(f"\n{Renkler.SARI}>> Sniffer baslatiliyor... (Cikmak icin Ctrl+C){Renkler.RESET}")
-            time.sleep(1)
-            # Python dosyasini sanki terminale yazmis gibi calistirir
-            os.system(f"{sys.executable} agent/sniffer.py")
-            input(f"\n{Renkler.MAVI}Ana menuye donmek icin Enter'a basin...{Renkler.RESET}")
+        if choice == '1':
+            print("\n[INFO] Starting Sniffer Module...")
+            print("Data will be saved to 'logs/traffic_data.csv'")
+            time.sleep(2)
+            try:
+                sniffer.packet_capture()
+            except KeyboardInterrupt:
+                print("\n[STOP] Sniffer stopped.")
 
-        elif secim == '2':
-            print(f"\n{Renkler.SARI}>> Model egitimi basliyor...{Renkler.RESET}")
-            os.system(f"{sys.executable} server/train_model.py")
-            input(f"\n{Renkler.MAVI}Ana menuye donmek icin Enter'a basin...{Renkler.RESET}")
+        elif choice == '2':
+            print("\n[INFO] Starting AI Training...")
+            train_model.train()
+            input("\nPress Enter to return to menu...")
 
-        elif secim == '3':
-            print(f"\n{Renkler.KIRMIZI}>> KORUMA MODU AKTIF! (Durdurmak icin Ctrl+C){Renkler.RESET}")
-            time.sleep(1)
-            os.system(f"{sys.executable} agent/ids.py")
-            input(f"\n{Renkler.MAVI}Ana menuye donmek icin Enter'a basin...{Renkler.RESET}")
+        elif choice == '3':
+            print("\n[INFO] Initializing Active Protection System...")
+            ids.start_ids()
+            input("\nPress Enter to return to menu...")
 
-        elif secim == '4':
-            print(f"\n{Renkler.MAVI}>> Dashboard aciliyor... Tarayicinizi kontrol edin.{Renkler.RESET}")
-            # Streamlit ozel bir komutla calisir
+        elif choice == '4':
+            print("\n[INFO] Launching Web Dashboard...")
             os.system("streamlit run server/dashboard.py")
-        
-        elif secim == '5':
-             print(f"\n{Renkler.KIRMIZI}>> Saldiri Simulasyonu Baslatiliyor...{Renkler.RESET}")
-             os.system(f"{sys.executable} saldirgan.py")
-             input(f"\n{Renkler.MAVI}Simulasyon bitti. Donmek icin Enter...{Renkler.RESET}")
 
-        elif secim == '0':
-            print(f"\n{Renkler.KIRMIZI}Sistem kapatiliyor. Guvenli gunler!{Renkler.RESET}")
+        elif choice == '5':
+            print("\n[TEST] Starting Attack Simulation...")
+            os.system("python saldirgan.py")
+            input("\nSimulation finished. Press Enter...")
+
+        elif choice == 'Q':
+            print("Exiting... Stay safe!")
             sys.exit()
-        
         else:
-            print(f"\n{Renkler.KIRMIZI}Hatali secim!{Renkler.RESET}")
+            print("[!] Invalid Selection!")
             time.sleep(1)
 
 if __name__ == "__main__":
-    try:
-        menu()
-    except KeyboardInterrupt:
-        print("\nCikis yapildi.")
+    main()

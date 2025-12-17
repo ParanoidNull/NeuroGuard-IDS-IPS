@@ -1,0 +1,7 @@
+scapy
+pandas
+scikit-learn
+streamlit
+plotly
+joblib
+watchdog

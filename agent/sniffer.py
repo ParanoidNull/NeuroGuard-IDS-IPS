@@ -1,94 +1,103 @@
-import sys
-import csv
 import os
+import pandas as pd
 from scapy.all import sniff, IP, TCP, UDP, ICMP, get_if_list, conf
 from datetime import datetime
+import warnings
 
-# Log dosyasının konumu
-LOG_FILE = "logs/traffic_data.csv"
+# Suppress warnings
+warnings.filterwarnings("ignore")
 
-class Renkler:
-    YESIL = '\033[92m'
-    MAVI = '\033[94m'
-    KIRMIZI = '\033[91m'
-    RESET = '\033[0m'
+# Define Log Directory and File Paths
+# We go one level up (..) to reach the 'logs' folder
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+LOG_FILE = os.path.join(LOG_DIR, 'traffic_data.csv')
 
-def csv_baslat():
-    """CSV dosyasını ve başlıkları oluşturur (Eğer yoksa)"""
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-    
-    if not os.path.isfile(LOG_FILE):
-        with open(LOG_FILE, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            # Yapay zeka için gerekli öznitelikler (Features)
-            writer.writerow(["Timestamp", "Src IP", "Dst IP", "Src Port", "Dst Port", "Protocol", "Flags", "Length"])
-            print(f"{Renkler.MAVI}Log dosyası oluşturuldu: {LOG_FILE}{Renkler.RESET}")
+# Create logs directory if it doesn't exist
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 
-def paket_isleyici(paket):
-    """Paketi analiz eder ve CSV'ye yazar"""
-    if IP in paket:
-        # Temel Bilgiler
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        src_ip = paket[IP].src
-        dst_ip = paket[IP].dst
-        length = len(paket)
-        
-        # Detaylar (Varsayılan)
-        protocol = "OTHER"
+def packet_handler(packet):
+    """
+    Parses the packet and saves features to the CSV file.
+    """
+    if IP in packet:
+        src_ip = packet[IP].src
+        dst_ip = packet[IP].dst
+        protocol = "Other"
         src_port = 0
         dst_port = 0
-        flags = "None"
+        length = len(packet)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        if TCP in paket:
+        # Determine Protocol
+        if TCP in packet:
             protocol = "TCP"
-            src_port = paket[TCP].sport
-            dst_port = paket[TCP].dport
-            flags = str(paket[TCP].flags) # Flags string'e çevrildi
-        elif UDP in paket:
+            src_port = packet[TCP].sport
+            dst_port = packet[TCP].dport
+        elif UDP in packet:
             protocol = "UDP"
-            src_port = paket[UDP].sport
-            dst_port = paket[UDP].dport
-        elif ICMP in paket:
+            src_port = packet[UDP].sport
+            dst_port = packet[UDP].dport
+        elif ICMP in packet:
             protocol = "ICMP"
-        
-        # Ekrana Özet Bas (Gözle takip için)
-        print(f"{Renkler.YESIL}[LOG]{Renkler.RESET} {protocol} | {src_ip}:{src_port} -> {dst_ip}:{dst_port} | Flags: {flags}")
 
-        # Dosyaya Kaydet
+        # Prepare Data Row
+        new_data = pd.DataFrame([{
+            'Timestamp': timestamp,
+            'Src IP': src_ip,
+            'Dst IP': dst_ip,
+            'Protocol': protocol,
+            'Src Port': src_port,
+            'Dst Port': dst_port,
+            'Length': length
+        }])
+
+        # Save to CSV
         try:
-            with open(LOG_FILE, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow([timestamp, src_ip, dst_ip, src_port, dst_port, protocol, flags, length])
-        except Exception as e:
-            print(f"Dosya yazma hatası: {e}")
+            if not os.path.isfile(LOG_FILE):
+                # Write with header if file doesn't exist
+                new_data.to_csv(LOG_FILE, index=False, mode='w')
+            else:
+                # Append without header if file exists
+                new_data.to_csv(LOG_FILE, index=False, mode='a', header=False)
+            
+            # Optional: Minimal visual feedback
+            # print(f"[+] {protocol} Packet: {src_ip} -> {dst_ip}")
+            
+        except PermissionError:
+            print("[ERROR] Permission denied! Please close the CSV file if it's open.")
 
-def dinlemeyi_baslat():
-    csv_baslat()
-    print(f"{Renkler.MAVI}--- NeuroGuard Veri Toplayıcı ---{Renkler.RESET}")
+def packet_capture():
+    print("\n--- Network Traffic Sniffer (Data Collector) ---")
     
-    # Windows'ta arayüz seçimi
+    # List Network Interfaces
     ifaces = get_if_list()
     for i, iface in enumerate(ifaces):
-        try:
-            # Bazen description alanı olmayabilir, hata vermesin
-            desc = conf.iface.description if hasattr(conf.iface, 'description') else "Bilinmiyor"
-        except:
-            desc = "Bilinmiyor"
-        print(f"{i}: {iface}")
-
-    print("-" * 30)
-    secim = input("Arayüz Numarası: ")
+        try: desc = conf.iface.description
+        except: desc = ""
+        print(f"{i}: {iface} {desc}")
+    
+    # Interface Selection
+    choice = input("\nSelect Interface ID to Sniff: ")
     
     try:
-        secilen_iface = ifaces[int(secim)]
-        print(f"Dinleniyor ve Kaydediliyor: {secilen_iface}")
-        sniff(iface=secilen_iface, prn=paket_isleyici, store=0)
+        selected_iface = ifaces[int(choice)]
+        print(f"\n[INFO] Sniffing started on: {selected_iface}")
+        print(f"[INFO] Data is being saved to: {LOG_FILE}")
+        print("[INFO] Press Ctrl+C to stop collection...\n")
+        
+        # Start Sniffing (store=0 to save memory)
+        sniff(iface=selected_iface, prn=packet_handler, store=0)
+        
+    except ValueError:
+        print("[ERROR] Invalid Input! Please enter a number.")
+    except IndexError:
+        print("[ERROR] Invalid Interface ID!")
+    except KeyboardInterrupt:
+        print("\n[STOP] Sniffer stopped by user.")
     except Exception as e:
-        print(f"{Renkler.KIRMIZI}Hata: {e}{Renkler.RESET}")
+        print(f"\n[ERROR] An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
-    try:
-        dinlemeyi_baslat()
-    except KeyboardInterrupt:
-        print(f"\n{Renkler.KIRMIZI}Kayıt durduruldu.{Renkler.RESET}")
+    packet_capture()
