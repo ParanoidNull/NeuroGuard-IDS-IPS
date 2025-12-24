@@ -2,86 +2,75 @@
 setlocal
 title NeuroGuard Launcher
 color 0A
+cls
 
-:: --- CRITICAL FIX ---
-:: Force execution in the script's directory (Fixes System32 issues)
+:: --- SET WORKING DIRECTORY ---
+:: Ensures the script runs from the correct folder path
 cd /d "%~dp0"
 
 echo ========================================================
-echo   NeuroGuard IDS/IPS - System Initializing...
-echo   Working Directory: %CD%
+echo   NeuroGuard - Environment Manager
 echo ========================================================
-echo.
 
-:: --- 1. ADMIN PRIVILEGES CHECK ---
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [WARNING] Administrator privileges required...
-    echo Requesting elevation...
-    powershell -Command "Start-Process '%~0' -Verb RunAs"
-    exit /b
-)
-
-:: --- 2. PYTHON DETECTION (Detective Mode) ---
-:: Try standard 'python' command
+:: --- STEP 1: DETECT PYTHON (GOTO STRATEGY) ---
+:: Attempt 1: Try standard 'python' command
 python --version >nul 2>&1
 if %errorlevel% equ 0 (
     set PYTHON_CMD=python
-    goto :FOUND
+    echo [INFO] Detected Standard Python.
+    goto :CheckVenv
 )
 
-:: Try Windows Launcher 'py' command
+:: Attempt 2: Try 'py' launcher (common on Windows)
 py --version >nul 2>&1
 if %errorlevel% equ 0 (
     set PYTHON_CMD=py
-    goto :FOUND
+    echo [INFO] Detected Python Launcher.
+    goto :CheckVenv
 )
 
-:: Try 'python3' command
-python3 --version >nul 2>&1
-if %errorlevel% equ 0 (
-    set PYTHON_CMD=python3
-    goto :FOUND
-)
-
-:: IF NOT FOUND
-echo [ERROR] Python not found in PATH!
-echo Please reinstall Python and check "Add to PATH" option.
+:: If both fail, display error and stop
+color 0C
+echo [ERROR] Python could not be found!
+echo Please install Python 3.10+ and ensure "Add to PATH" is selected.
 pause
-exit
+exit /b
 
-:FOUND
-echo [OK] Python found! Command: %PYTHON_CMD%
+:CheckVenv
+:: --- STEP 2: VIRTUAL ENVIRONMENT CHECK ---
+:: If venv exists, skip installation and jump to launch
+if exist "venv\Scripts\activate.bat" goto :LaunchSystem
 
-:: --- 3. VIRTUAL ENVIRONMENT (VENV) SETUP ---
-if not exist "venv" (
-    echo [INFO] Creating virtual environment (first run)...
-    %PYTHON_CMD% -m venv venv
-    
-    echo [INFO] Installing dependencies...
-    call venv\Scripts\activate
-    
-    %PYTHON_CMD% -m pip install --upgrade pip
-    if exist "requirements.txt" (
-        pip install -r requirements.txt
-    )
-    echo [OK] Setup complete!
-    timeout /t 2 >nul
-) else (
-    echo [OK] Activating virtual environment...
-    call venv\Scripts\activate
+echo [INFO] Virtual environment not found. Initializing setup...
+echo [STEP 1/2] Creating virtual environment...
+"%PYTHON_CMD%" -m venv venv
+
+:: Verify if venv was created successfully
+if not exist "venv\Scripts\activate.bat" (
+    color 0C
+    echo [ERROR] Failed to create venv.
+    pause
+    exit /b
 )
 
-:: --- 4. NPCAP CHECK ---
-if not exist "%SystemRoot%\System32\Npcap\wpcap.dll" (
-    echo [WARNING] Npcap driver not found! Scapy might fail.
-    echo If you see errors, please install Npcap from https://npcap.com
-    timeout /t 3
-)
+echo [STEP 2/2] Installing dependencies...
+call venv\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r requirements.txt
+echo [SUCCESS] Installation complete.
+timeout /t 2 >nul
+cls
 
-:: --- 5. LAUNCH ---
+:LaunchSystem
+:: --- STEP 3: SYSTEM LAUNCH ---
+:: Activate the environment
+if exist "venv\Scripts\activate.bat" call venv\Scripts\activate.bat
+
+echo [INFO] Starting NeuroGuard...
 echo.
-echo [INFO] Launching NeuroGuard Menu...
-%PYTHON_CMD% main.py
+"%PYTHON_CMD%" main.py
 
+:: --- STEP 4: EXIT HANDLING ---
+echo.
+echo [INFO] Process terminated.
 pause

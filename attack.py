@@ -1,29 +1,31 @@
 from scapy.all import IP, TCP, send, RandShort
 import time
+import sys
 
-# TARGET CONFIGURATION
-# We use Google DNS (8.8.8.8) to ensure traffic actually leaves the network interface
-target_ip = "8.8.8.8" 
-target_port = 666   # This port is defined as "Forbidden" in ids.py
+# Configuration
+TARGET_IP = "8.8.8.8" # External IP to force routing through the interface
+TARGET_PORT = 666     # Flagged port for IDS detection
+PACKET_COUNT = 20
 
-print(f"Starting Attack Simulation... Target: {target_ip}:{target_port} (TCP)")
+print(f"\n[+] Starting TCP SYN Flood Simulation")
+print(f"[+] Target: {TARGET_IP}:{TARGET_PORT}")
+print("-" * 40)
 
-# Loop increased to 20 to ensure IDS captures the traffic
-for i in range(20):
-    try:
-        # Construct a TCP SYN packet (Simulating a SYN Flood or Port Scan)
-        pkt = IP(dst=target_ip) / TCP(dport=target_port, flags="S", sport=RandShort())
+try:
+    for i in range(PACKET_COUNT):
+        # Crafting a malicious packet (SYN Flag set)
+        pkt = IP(dst=TARGET_IP) / TCP(dport=TARGET_PORT, flags="S", sport=RandShort())
         
-        # Send packet
+        # Sending without verbose output for speed
         send(pkt, verbose=0)
         
-        print(f"[{i+1}] Malicious packet sent! -> {target_ip}")
+        sys.stdout.write(f"\r[->] Packet sent: {i+1}/{PACKET_COUNT} to {TARGET_IP}")
+        sys.stdout.flush()
         
-        # Short delay to prevent choking the terminal
-        time.sleep(0.5)
-        
-    except Exception as e:
-        print(f"Error: {e}")
+        time.sleep(0.2) # Slight delay to prevent local congestion
 
-print("Simulation finished.")
+except Exception as e:
+    print(f"\n[ERROR] Simulation failed: {e}")
+
+print(f"\n\n[+] Simulation finished. Check IDS logs.")
 time.sleep(2)
